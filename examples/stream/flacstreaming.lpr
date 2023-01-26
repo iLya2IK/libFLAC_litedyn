@@ -12,7 +12,7 @@
    step 1.
    cInputFile->FLACOggDecoder->[pcm]->FLACEncoder->[FLAC packets]->cStreamFile[N]
    step 2.
-   cStreamFile[N]->FLACAltDecoder->[pcm]->FLACOggEncoder->[ogg container]->cOutputFile
+   cStreamFile[N]->FLACDecoder->[pcm]->FLACOggEncoder->[ogg container]->cOutputFile
 }
 
 program FLACstreaming;
@@ -79,7 +79,10 @@ begin
                                          TOGLSound.PROP_SAMPLE_SIZE, ss16bit,
                                          TFLAC.PROP_COMPR_LEVEL, fclLevel5,
                                          // FLAC specifies a subset of itself as
-                                         // the Subset format
+                                         // the Subset format.
+                                         // Subset format allows streaming
+                                         // (decoder can be started from any
+                                         //  frame)
                                          TFLAC.PROP_SUBSET, True]);
 
         // initialize intermediate buffer to store decoded data chunk

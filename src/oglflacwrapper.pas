@@ -458,8 +458,6 @@ type
                        {%H-}Par : Pointer) : ISoundFrameSize; override;
     procedure Close({%H-}Par : Pointer); override;
 
-    procedure Flush({%H-}Par : Pointer); override;
-
     function Ready : Boolean; override;
   end;
 
@@ -1437,12 +1435,6 @@ end;
 procedure TFLACAbstractEncoder.Close(Par : Pointer);
 begin
   fRef.Finish;
-end;
-
-procedure TFLACAbstractEncoder.Flush(Par : Pointer);
-begin
-  fRef.Finish;
-  InitFLACEncoder;
 end;
 
 function TFLACAbstractEncoder.Ready : Boolean;
