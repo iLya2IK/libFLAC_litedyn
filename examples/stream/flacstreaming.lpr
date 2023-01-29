@@ -99,7 +99,10 @@ begin
             try
               // initialize custom streaming encoder
               if not Assigned(pack_enc) then
-                pack_enc := TFLAC.FLACStreamEncoder(aFileStream, aEncProps, nil)
+                pack_enc := TFLAC.FLACStreamEncoder(aFileStream,
+                                                    [sdpForceNotSeekable,
+                                                     sdpWriteOnly],
+                                                    aEncProps, nil)
               else
                 pack_enc.SetStream(aFileStream);
               frame_len := TOGLSound.NewEmptyFrame(MaxLength);
@@ -152,7 +155,9 @@ begin
               // open file stream to read from cStreamFile
               aFileStream := TFileStream.Create(Files[i], fmOpenRead);
               try
-                pack_dec := TFLAC.FLACStreamDecoder(aFileStream);
+                pack_dec := TFLAC.FLACStreamDecoder(aFileStream,
+                                                    [sdpForceNotSeekable,
+                                                     sdpReadOnly]);
                 try
                   repeat
                     // read decoded pcm data from FLAC streaming file

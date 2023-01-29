@@ -16,7 +16,7 @@ unit OGLFLACWrapper;
 interface
 
 uses
-  Classes, SysUtils, libFLAC_dynlite,
+  Classes, SysUtils, libFLAC_dynlite, OGLFastList,
   OGLOGGWrapper, OGLSoundUtils, OGLSoundUtilTypes, OGLSoundDataConverting;
 
 type
@@ -77,8 +77,14 @@ type
                              fcaRightSide,
                              fcaMidSide );
 
+  { IFLACComment }
+
   IFLACComment = interface(IOGGComment)
   ['{8C90A978-8544-4AE8-8164-ED856ED256B7}']
+  function GetVendor : String;
+  procedure SetVendor(const S : String);
+
+  property Vendor : String read GetVendor write SetVendor;
   end;
 
   { IFLACEncoder }
@@ -178,6 +184,8 @@ type
   property LimitMinBitrate : Boolean read GetLimitMinBitrate write SetLimitMinBitrate;
   end;
 
+  { IFLACDecoder }
+
   IFLACDecoder = interface
   ['{3E63CAC8-7324-4AF6-B509-4ADDA6F9B54F}']
   function Ref : pFLAC__StreamDecoder;
@@ -211,6 +219,7 @@ type
   procedure SetMetaSampleRate(aValue : Cardinal);
   procedure SetMetaChannels(aValue : Cardinal);
   procedure SetMetaBitsPerSample(aValue : Cardinal);
+  procedure SetMetaTotalLength(aValue : QWord);
   function SetMetadataRespond(atype: FLAC__MetadataType): Boolean;
   function SetMetadataRespondApplication(const id: TFLAC__byteArray4): Boolean;
   function SetMetadataRespondAll: Boolean;
@@ -246,16 +255,47 @@ type
   property MD5Checking : Boolean read GetMD5Checking write SetMD5Checking;
   end;
 
+  { TFLACVorbisTag }
+
+  TFLACVorbisTag = class(TStringList)
+  private
+    FTag : String;
+  public
+    constructor Create(const aTag : String);
+
+    property Tag : String read FTag;
+  end;
+
+  { TFLACVorbisComment }
+
+  TFLACVorbisComment = class(specialize TFastBaseCollection<TFLACVorbisTag>)
+  private
+    FVendor : String;
+  public
+    procedure AddComment(const comment: String);
+    procedure AddTag(const atag, avalue: String);
+    function Tag(const aTag : String) : TFLACVorbisTag;
+    function CountAll : Integer;
+
+    property Vendor : String read FVendor write FVendor;
+  end;
+
   { TFLACComment }
 
   TFLACComment = class(TInterfacedObject, IFLACComment)
   private
-    fRef : pFLAC__StreamMetadata;
+    fRef : TFLACVorbisComment;
+
+  protected
+    procedure Init;
+    procedure Done;
+    function GetVendor : String;
+    procedure SetVendor(const S : String);
   public
     function Ref : Pointer;
 
-    procedure Init;
-    procedure Done;
+    constructor Create;
+    destructor Destroy; override;
 
     procedure Add(const comment: String);
     procedure AddTag(const tag, value: String);
@@ -336,7 +376,6 @@ type
     procedure SetOggSerialNumber(serial_number: Longint);
     procedure SetCompressionLevel(aValue: TFLACCompressionLevel);
     //procedure SetMetadata(metadata: IFLACStreamMetadata; num_blocks: Cardinal);
-
     function GetState: TFLACEncoderState;
     function GetVerifyDecoderState: TFLACStreamDecoderState;
     function GetResolvedStateString: String;
@@ -359,12 +398,14 @@ type
     fMetaSampleRate : Cardinal;
     fMetaChannels   : Cardinal;
     fMetaBPS  : Cardinal;
+    fMetaTotal : QWord;
   protected
     function SetOggSerialNumber(serial_number: Longint): Boolean;
     procedure SetMD5Checking(aValue: Boolean);
     procedure SetMetaSampleRate(aValue : Cardinal);
     procedure SetMetaChannels(aValue : Cardinal);
     procedure SetMetaBitsPerSample(aValue : Cardinal);
+    procedure SetMetaTotalLength(aValue : QWord);
     function SetMetadataRespond(atype: FLAC__MetadataType): Boolean;
     function SetMetadataRespondApplication(const id: TFLAC__byteArray4): Boolean;
     function SetMetadataRespondAll: Boolean;
@@ -472,9 +513,8 @@ type
 
   TFLACStreamEncoder = class(TFLACAbstractEncoder)
   public
-    constructor Create(aStream : TStream;
-                       aProps : ISoundEncoderProps;
-                       aComments : IOGGComment);
+    constructor Create(aStream : TStream; aDataLimits : TSoundDataLimits;
+      aProps : ISoundEncoderProps; aComments : IOGGComment);
     procedure SetStream(aStream : TStream);
   end;
 
@@ -482,9 +522,8 @@ type
 
   TFLACOggStreamEncoder = class(TFLACOggEncoder)
   public
-    constructor Create(aStream : TStream;
-                       aProps : ISoundEncoderProps;
-                       aComments : IOGGComment);
+    constructor Create(aStream : TStream; aDataLimits : TSoundDataLimits;
+      aProps : ISoundEncoderProps; aComments : IOGGComment);
     procedure SetStream(aStream : TStream);
   end;
 
@@ -526,6 +565,15 @@ type
     function ReadData(Buffer : Pointer; Count : ISoundFrameSize;
                        {%H-}Par : Pointer) : ISoundFrameSize; override;
     procedure ResetToStart; override;
+    procedure RawSeek(pos : Int64); override;
+    procedure SampleSeek(pos : Integer); override;
+    procedure TimeSeek(pos : Double); override;
+    function RawTell : Int64; override;
+    function SampleTell : Integer; override;
+    function TimeTell : Double; override;
+    function RawTotal : Int64; override;
+    function SampleTotal : Integer; override;
+    function TimeTotal : Double; override;
 
     function Ready : Boolean; override;
   end;
@@ -541,7 +589,7 @@ type
 
   TFLACStreamDecoder = class(TFLACAbstractDecoder)
   public
-    constructor Create(aStream : TStream);
+    constructor Create(aStream : TStream; aDataLimits : TSoundDataLimits);
     procedure SetStream(aStream : TStream);
   end;
 
@@ -549,7 +597,7 @@ type
 
   TFLACOggStreamDecoder = class(TFLACOggDecoder)
   public
-    constructor Create(aStream : TStream);
+    constructor Create(aStream : TStream; aDataLimits : TSoundDataLimits);
   end;
 
   { TFLACFile }
@@ -568,24 +616,25 @@ type
     function InitEncoder(aProps : ISoundEncoderProps;
                    aComments : ISoundComment) : ISoundEncoder; override;
     function InitDecoder : ISoundDecoder; override;
+    class function DefaultEncoderDataLimits : TSoundDataLimits; override;
   end;
 
   TFLAC = class
   public
     class function NewComment : IFLACComment;
-     class function FLACOggStreamEncoder(aStream : TStream;
-                       aProps : ISoundEncoderProps;
-                       aComments : IOGGComment) : TFLACOggStreamEncoder;
-     class function FLACOggStreamDecoder(aStream : TStream) :
-                                                         TFLACOggStreamDecoder;
-     class function FLACStreamEncoder(aStream : TStream;
-                       aProps : ISoundEncoderProps;
-                       aComments: IOGGComment) : TFLACStreamEncoder;
-     class function FLACStreamDecoder(aStream : TStream) :
-                                                         TFLACStreamDecoder;
+    class function FLACOggStreamEncoder(aStream : TStream;
+        aDataLimits : TSoundDataLimits; aProps : ISoundEncoderProps;
+        aComments : IOGGComment) : TFLACOggStreamEncoder;
+    class function FLACOggStreamDecoder(aStream : TStream;
+        aDataLimits : TSoundDataLimits) : TFLACOggStreamDecoder;
+    class function FLACStreamEncoder(aStream : TStream;
+        aDataLimits : TSoundDataLimits; aProps : ISoundEncoderProps;
+        aComments : IOGGComment) : TFLACStreamEncoder;
+    class function FLACStreamDecoder(aStream : TStream;
+        aDataLimits : TSoundDataLimits) : TFLACStreamDecoder;
 
-    class function PROP_COMPR_LEVEL : Cardinal;
-    class function PROP_SUBSET : Cardinal;
+    const PROP_COMPR_LEVEL : Cardinal = $031;
+    const PROP_SUBSET : Cardinal      = $032;
 
     class function FLACLibsLoad(const aFLACLibs : array of String) : Boolean;
     class function FLACLibsLoadDefault : Boolean;
@@ -617,8 +666,23 @@ function flac_enc_read (
   {%H-}buffer : pFLAC__byte;
   {%H-}bytes : pcsize_t;
   {%H-}client_data : Pointer) : FLAC__StreamEncoderReadStatus; cdecl;
+var
+  Sz : Int64;
 begin
-  Result := FLAC__STREAM_ENCODER_READ_STATUS_UNSUPPORTED;
+  if TFLACAbstractEncoder(client_data).DataStream.Readable then
+  begin
+    if TFLACAbstractEncoder(client_data).DataStream.EoS then
+      Result := FLAC__STREAM_ENCODER_READ_STATUS_END_OF_STREAM else
+    begin
+      Sz := TFLACAbstractEncoder(client_data).DataStream.DoRead(buffer, bytes^);
+      if Sz < 0 then
+        Result := FLAC__STREAM_ENCODER_READ_STATUS_ABORT else
+      begin
+        Result := FLAC__STREAM_ENCODER_READ_STATUS_CONTINUE;
+      end;
+    end;
+  end else
+    Result := FLAC__STREAM_ENCODER_READ_STATUS_UNSUPPORTED;
 end;
 
 function flac_enc_write (
@@ -627,7 +691,7 @@ function flac_enc_write (
   {%H-}samples, {%H-}current_frame : cuint32;
   client_data : Pointer) : FLAC__StreamEncoderWriteStatus; cdecl;
 begin
-  TFLACAbstractEncoder(client_data).Writer.DoWrite(Pointer(buffer), bytes);
+  TFLACAbstractEncoder(client_data).DataStream.DoWrite(Pointer(buffer), bytes);
   Result := FLAC__STREAM_ENCODER_WRITE_STATUS_OK;
 end;
 
@@ -636,15 +700,37 @@ function flac_enc_seek (
   {%H-}absolute_byte_offset : FLAC__uint64;
   {%H-}client_data : Pointer) : FLAC__StreamEncoderSeekStatus; cdecl;
 begin
-  Result := FLAC__STREAM_ENCODER_SEEK_STATUS_UNSUPPORTED;
+  if TFLACAbstractEncoder(client_data).DataStream.Seekable then
+  begin
+    if TFLACAbstractEncoder(client_data).DataStream.DoSeek(absolute_byte_offset, 0) = 0 then
+      Result := FLAC__STREAM_ENCODER_SEEK_STATUS_OK
+    else
+      Result := FLAC__STREAM_ENCODER_SEEK_STATUS_ERROR;
+  end
+  else
+    Result := FLAC__STREAM_ENCODER_SEEK_STATUS_UNSUPPORTED;
 end;
 
 function flac_enc_tell (
   const {%H-}encoder : pFLAC__StreamEncoder;
   {%H-}absolute_byte_offset : pFLAC__uint64;
   {%H-}client_data : Pointer) : FLAC__StreamEncoderTellStatus; cdecl;
+var
+  R : Int64;
 begin
-  Result := FLAC__STREAM_ENCODER_TELL_STATUS_UNSUPPORTED;
+  if TFLACAbstractEncoder(client_data).DataStream.Seekable then
+  begin
+    R := TFLACAbstractEncoder(client_data).DataStream.DoTell;
+    if R >= 0 then
+    begin
+      Result := FLAC__STREAM_DECODER_TELL_STATUS_OK;
+      absolute_byte_offset^ := Int64(R);
+    end
+    else
+      Result := FLAC__STREAM_ENCODER_TELL_STATUS_ERROR;
+  end
+  else
+    Result := FLAC__STREAM_ENCODER_TELL_STATUS_UNSUPPORTED;
 end;
 
 procedure flac_enc_meta (
@@ -662,16 +748,20 @@ function flac_dec_read (
   client_data : pointer) : FLAC__StreamDecoderReadStatus; cdecl;
 var rsz : integer;
 begin
-  rsz := TFLACAbstractDecoder(client_data).Reader.DoRead(buffer, bytes^);
-  if rsz > 0 then
+  if TFLACAbstractDecoder(client_data).DataStream.Readable then
   begin
-    bytes^ := rsz;
-    Result := FLAC__STREAM_DECODER_READ_STATUS_CONTINUE;
-  end else
-  if rsz = 0 then
-  begin
-    bytes^ := 0;
-    Result := FLAC__STREAM_DECODER_READ_STATUS_END_OF_STREAM;
+    rsz := TFLACAbstractDecoder(client_data).DataStream.DoRead(buffer, bytes^);
+    if rsz > 0 then
+    begin
+      bytes^ := rsz;
+      Result := FLAC__STREAM_DECODER_READ_STATUS_CONTINUE;
+    end else
+    if rsz = 0 then
+    begin
+      bytes^ := 0;
+      Result := FLAC__STREAM_DECODER_READ_STATUS_END_OF_STREAM;
+    end else
+      Result := FLAC__STREAM_DECODER_READ_STATUS_ABORT;
   end else
     Result := FLAC__STREAM_DECODER_READ_STATUS_ABORT;
 end;
@@ -681,15 +771,37 @@ function flac_dec_seek (
   {%H-}absolute_byte_offset : FLAC__uint64;
   {%H-}client_data : pointer) : FLAC__StreamDecoderSeekStatus; cdecl;
 begin
-  Result := FLAC__STREAM_DECODER_SEEK_STATUS_UNSUPPORTED;
+  if TFLACAbstractEncoder(client_data).DataStream.Seekable then
+  begin
+    if TFLACAbstractEncoder(client_data).DataStream.DoSeek(absolute_byte_offset, 0) = 0 then
+      Result := FLAC__STREAM_DECODER_SEEK_STATUS_OK
+    else
+      Result := FLAC__STREAM_DECODER_SEEK_STATUS_ERROR;
+  end
+  else
+    Result := FLAC__STREAM_DECODER_SEEK_STATUS_UNSUPPORTED;
 end;
 
 function flac_dec_tell (
   const {%H-}decoder : pFLAC__StreamDecoder;
   {%H-}absolute_byte_offset : pFLAC__uint64;
   {%H-}client_data : pointer) : FLAC__StreamDecoderTellStatus; cdecl;
+var
+  R : Int64;
 begin
-  Result := FLAC__STREAM_DECODER_TELL_STATUS_UNSUPPORTED;
+  if TFLACAbstractEncoder(client_data).DataStream.Seekable then
+  begin
+    R := TFLACAbstractEncoder(client_data).DataStream.DoTell;
+    if R >= 0 then
+    begin
+      Result := FLAC__STREAM_DECODER_TELL_STATUS_OK;
+      absolute_byte_offset^ := Int64(R);
+    end
+    else
+      Result := FLAC__STREAM_DECODER_TELL_STATUS_ERROR;
+  end
+  else
+    Result := FLAC__STREAM_DECODER_TELL_STATUS_UNSUPPORTED;
 end;
 
 function flac_dec_length (
@@ -697,14 +809,27 @@ function flac_dec_length (
   {%H-}stream_length : pFLAC__uint64;
   {%H-}client_data : pointer) : FLAC__StreamDecoderLengthStatus; cdecl;
 begin
-  Result := FLAC__STREAM_DECODER_LENGTH_STATUS_UNSUPPORTED;
+  if TFLACAbstractEncoder(client_data).DataStream.Seekable then
+  begin
+    stream_length^ := TFLACAbstractEncoder(client_data).DataStream.Size;
+  end
+  else
+    Result := FLAC__STREAM_DECODER_LENGTH_STATUS_UNSUPPORTED;
 end;
 
 function flac_dec_eof (
   const {%H-}decoder : pFLAC__StreamDecoder;
   {%H-}client_data : pointer) : FLAC__bool; cdecl;
 begin
-  Result := FLAC__false;
+  if TFLACAbstractEncoder(client_data).DataStream.Seekable then
+  begin
+    if TFLACAbstractEncoder(client_data).DataStream.EoS then
+      Result := FLAC__true
+    else
+      Result := FLAC__false;
+  end
+  else
+    Result := FLAC__false;
 end;
 
 function flac_dec_write (
@@ -720,10 +845,22 @@ begin
   end;
 end;
 
+function FLA_VorbisComment_Entry_to_Str(const entry : FLAC__StreamMetadata_VorbisComment_Entry) : string;
+begin
+  if entry.length > 0 then
+  begin
+    SetLength(Result, entry.length);
+    Move(entry.entry^, Result[1], entry.length);
+  end else
+    Result := '';
+end;
+
 procedure flac_dec_meta (
   const {%H-}decoder : pFLAC__StreamDecoder;
   const {%H-}metadata : pFLAC__StreamMetadata;
   {%H-}client_data : pointer); cdecl;
+var i : integer;
+    p : pFLAC__StreamMetadata_VorbisComment_Entry;
 begin
   case (metadata^.atype) of
     FLAC__METADATA_TYPE_STREAMINFO:
@@ -731,10 +868,22 @@ begin
       TFLACAbstractDecoder(client_data).Ref.SetMetaSampleRate(metadata^.data.stream_info.sample_rate);
       TFLACAbstractDecoder(client_data).Ref.SetMetaChannels(metadata^.data.stream_info.channels);
       TFLACAbstractDecoder(client_data).Ref.SetMetaBitsPerSample(metadata^.data.stream_info.bits_per_sample);
+      TFLACAbstractDecoder(client_data).Ref.SetMetaTotalLength(metadata^.data.stream_info.total_samples);
     end;
     FLAC__METADATA_TYPE_VORBIS_COMMENT:
     begin
-      //todo: write metadata to comments here
+      //write metadata to comments here
+      (TFLACAbstractDecoder(client_data).Comments as IFLACComment).Vendor :=
+                                     FLA_VorbisComment_Entry_to_Str(metadata^.data.vorbis_comment.vendor_string);
+      if metadata^.data.vorbis_comment.num_comments > 0 then
+      begin
+        p := metadata^.data.vorbis_comment.comments;
+        for i := 0 to metadata^.data.vorbis_comment.num_comments-1 do
+        begin
+          (TFLACAbstractDecoder(client_data).Comments as IFLACComment).Add(FLA_VorbisComment_Entry_to_Str(p^));
+          Inc(p);
+        end;
+      end;
     end;
   end;
 end;
@@ -747,24 +896,87 @@ begin
   //todo: proceed the error here (raise exception)
 end;
 
+{ TFLACVorbisComment }
+
+procedure TFLACVorbisComment.AddComment(const comment : String);
+var
+  aTag, aValue : String;
+  P : Integer;
+begin
+  P := Pos('=', comment);
+  if P > 0 then
+  begin
+    aTag := Copy(comment, 1, P - 1).Trim;
+    aValue := Copy(comment, P + 1, Length(comment)).Trim;
+    AddTag(aTag, aValue);
+  end;
+end;
+
+procedure TFLACVorbisComment.AddTag(const atag, avalue : String);
+var
+  t : TFLACVorbisTag;
+begin
+  t := Tag(atag);
+  if not Assigned(t) then
+  begin
+    t := TFLACVorbisTag.Create(atag);
+    Add(t);
+  end;
+  t.Add(avalue);
+end;
+
+function TFLACVorbisComment.Tag(const aTag : String) : TFLACVorbisTag;
+var i : integer;
+begin
+  for i := 0 to Count-1 do
+  begin
+    if SameText(Self[i].Tag, aTag) then
+    begin
+      Result := Self[i];
+      Exit;
+    end;
+  end;
+  Result := nil;
+end;
+
+function TFLACVorbisComment.CountAll : Integer;
+var i : integer;
+begin
+  Result := 0;
+  for i := 0 to Count-1 do
+  begin
+    Inc(Result, Self[i].Count);
+  end;
+end;
+
+{ TFLACVorbisTag }
+
+constructor TFLACVorbisTag.Create(const aTag : String);
+begin
+  inherited Create;
+  FTag := aTag;
+end;
+
 { TFLACStreamDecoder }
 
-constructor TFLACStreamDecoder.Create(aStream : TStream);
+constructor TFLACStreamDecoder.Create(aStream : TStream;
+  aDataLimits : TSoundDataLimits);
 begin
-  InitReader(TOGLSound.NewStreamReader(aStream));
+  InitStream(TOGLSound.NewDataStream(aStream, aDataLimits));
   inherited Create;
 end;
 
 procedure TFLACStreamDecoder.SetStream(aStream : TStream);
 begin
-  (Reader as TSoundStreamDataReader).Stream := aStream;
+  (DataStream as TSoundDataStream).Stream := aStream;
 end;
 
 { TFLACOggStreamDecoder }
 
-constructor TFLACOggStreamDecoder.Create(aStream : TStream);
+constructor TFLACOggStreamDecoder.Create(aStream : TStream;
+  aDataLimits : TSoundDataLimits);
 begin
-  InitReader(TOGLSound.NewStreamReader(aStream));
+  InitStream(TOGLSound.NewDataStream(aStream, aDataLimits));
   inherited Create;
 end;
 
@@ -772,8 +984,15 @@ end;
 
 procedure TFLACOggDecoder.InitFLACDecoder;
 begin
-  fRef.InitOGGStream(@flac_dec_read, nil, nil, nil, nil,
-                  @flac_dec_write, @flac_dec_meta, @flac_dec_error, Self);
+  if DataStream.Seekable then
+    fRef.InitOGGStream(@flac_dec_read, @flac_dec_seek, @flac_dec_tell,
+                                       @flac_dec_length, @flac_dec_eof,
+                                       @flac_dec_write, @flac_dec_meta,
+                                       @flac_dec_error, Self) else
+    fRef.InitOGGStream(@flac_dec_read, nil, nil,
+                                       nil, nil,
+                                       @flac_dec_write, @flac_dec_meta,
+                                       @flac_dec_error, Self);
 end;
 
 { TFLACAbstractDecoder }
@@ -837,8 +1056,15 @@ end;
 
 procedure TFLACAbstractDecoder.InitFLACDecoder;
 begin
-  fRef.InitStream(@flac_dec_read, nil, nil, nil, nil,
-                  @flac_dec_write, @flac_dec_meta, @flac_dec_error, Self);
+  if DataStream.Seekable then
+    fRef.InitStream(@flac_dec_read, @flac_dec_seek, @flac_dec_tell,
+                                    @flac_dec_length, @flac_dec_eof,
+                                    @flac_dec_write, @flac_dec_meta,
+                                    @flac_dec_error, Self) else
+    fRef.InitStream(@flac_dec_read, nil, nil,
+                                    nil, nil,
+                                    @flac_dec_write, @flac_dec_meta,
+                                    @flac_dec_error, Self);
 end;
 
 procedure TFLACAbstractDecoder.Init;
@@ -851,6 +1077,7 @@ begin
   fOBPos := 0;
 
   FRef := TFLACDecoder.Create as IFLACDecoder;
+  FRef.SetMetadataRespond(FLAC__METADATA_TYPE_VORBIS_COMMENT);
   InitFLACDecoder;
   ReadMetadata;
 end;
@@ -870,7 +1097,7 @@ end;
 
 function TFLACAbstractDecoder.GetBitrate : Cardinal;
 begin
-  Result := 0;
+  Result := fRef.BitsPerSample * fRef.SampleRate;
 end;
 
 function TFLACAbstractDecoder.GetChannels : Cardinal;
@@ -970,6 +1197,80 @@ begin
   fRef.Reset;
 end;
 
+procedure TFLACAbstractDecoder.RawSeek(pos : Int64);
+begin
+  if DataStream.Seekable then
+    fRef.SeekAbsolute(FrameFromBytes(pos).AsSamples) else
+    inherited RawSeek(pos);
+end;
+
+procedure TFLACAbstractDecoder.SampleSeek(pos : Integer);
+begin
+  if DataStream.Seekable then
+    fRef.SeekAbsolute(pos) else
+    inherited SampleSeek(pos);
+end;
+
+procedure TFLACAbstractDecoder.TimeSeek(pos : Double);
+var
+  v : Int64;
+begin
+  if DataStream.Seekable then
+  begin
+    v := Round(pos * GetFrequency);
+    fRef.SeekAbsolute(v);
+  end else
+    inherited TimeSeek(pos);
+end;
+
+function TFLACAbstractDecoder.RawTell : Int64;
+begin
+  if DataStream.Seekable then
+    Result := FrameFromSamples(fRef.GetDecodePosition).AsBytes
+  else
+    Result := inherited RawTell;
+end;
+
+function TFLACAbstractDecoder.SampleTell : Integer;
+begin
+  if DataStream.Seekable then
+    Result := fRef.GetDecodePosition
+  else
+    Result := inherited SampleTell;
+end;
+
+function TFLACAbstractDecoder.TimeTell : Double;
+begin
+  if DataStream.Seekable then
+    Result := Double(fRef.GetDecodePosition) / Double(fRef.GetSampleRate)
+  else
+    Result := inherited TimeTell;
+end;
+
+function TFLACAbstractDecoder.RawTotal : Int64;
+begin
+  if DataStream.Seekable then
+    Result := FrameFromSamples(fRef.GetTotalSamples).AsBytes
+  else
+    Result := inherited RawTotal;
+end;
+
+function TFLACAbstractDecoder.SampleTotal : Integer;
+begin
+  if DataStream.Seekable then
+    Result := fRef.GetTotalSamples
+  else
+    Result := inherited SampleTotal;
+end;
+
+function TFLACAbstractDecoder.TimeTotal : Double;
+begin
+  if DataStream.Seekable then
+    Result := Double(fRef.GetTotalSamples) / Double(fRef.GetSampleRate)
+  else
+    Result := inherited TimeTotal;
+end;
+
 function TFLACAbstractDecoder.Ready : Boolean;
 begin
   Result := Assigned(fRef);
@@ -1000,6 +1301,11 @@ end;
 procedure TFLACDecoder.SetMetaBitsPerSample(aValue : Cardinal);
 begin
   fMetaBPS := aValue;
+end;
+
+procedure TFLACDecoder.SetMetaTotalLength(aValue : QWord);
+begin
+  fMetaTotal := aValue;
 end;
 
 function TFLACDecoder.SetMetadataRespond(atype : FLAC__MetadataType) : Boolean;
@@ -1052,6 +1358,7 @@ end;
 function TFLACDecoder.GetTotalSamples : QWord;
 begin
   Result := FLAC__stream_decoder_get_total_samples(fRef);
+  if Result = 0 then Result := fMetaTotal;
 end;
 
 function TFLACDecoder.GetChannels : Cardinal;
@@ -1201,65 +1508,115 @@ end;
 
 function TFLACComment.Ref : Pointer;
 begin
-  Result := fRef;
+  Result := Pointer(fRef);
+end;
+
+constructor TFLACComment.Create;
+begin
+  Init;
+end;
+
+destructor TFLACComment.Destroy;
+begin
+  Done;
+  inherited Destroy;
 end;
 
 procedure TFLACComment.Init;
 begin
-  //
+  fRef := TFLACVorbisComment.Create;
 end;
 
 procedure TFLACComment.Done;
 begin
-  //
+  fRef.Free;
+end;
+
+function TFLACComment.GetVendor : String;
+begin
+  Result := fRef.Vendor;
+end;
+
+procedure TFLACComment.SetVendor(const S : String);
+begin
+  fRef.Vendor := S;
 end;
 
 procedure TFLACComment.Add(const comment : String);
 begin
-  //
+  fRef.AddComment(comment);
 end;
 
 procedure TFLACComment.AddTag(const tag, value : String);
 begin
-  //
+  fRef.AddTag(tag, value);
 end;
 
 function TFLACComment.Query(const tag : String; index : integer) : String;
+var
+  t : TFLACVorbisTag;
 begin
-  Result := '';
+  if index < 0 then
+    Result := ''
+  else
+  begin
+    t := fRef.Tag(tag);
+    if Assigned(t) then
+    begin
+      if t.Count > index then
+      begin
+        Result := t[index];
+      end else
+        Result := '';
+    end else
+    begin
+      Result := '';
+    end;
+  end;
 end;
 
 function TFLACComment.QueryCount(const tag : String) : integer;
+var
+  t : TFLACVorbisTag;
 begin
-  Result := 0;
+  t := fRef.Tag(tag);
+  if Assigned(t) then
+  begin
+    Result := t.Count;
+  end else
+  begin
+    Result := 0;
+  end;
 end;
 
 { TFLACOggStreamEncoder }
 
 constructor TFLACOggStreamEncoder.Create(aStream : TStream;
+  aDataLimits : TSoundDataLimits;
   aProps : ISoundEncoderProps; aComments : IOGGComment);
 begin
-  InitWriter(TOGLSound.NewStreamWriter(aStream));
+  InitStream(TOGLSound.NewDataStream(aStream, aDataLimits));
   inherited Create(aProps, aComments);
 end;
 
 procedure TFLACOggStreamEncoder.SetStream(aStream : TStream);
 begin
-  (Writer as TSoundStreamDataWriter).Stream := aStream;
+  (DataStream as TSoundDataStream).Stream := aStream;
 end;
 
 { TFLACStreamEncoder }
 
 constructor TFLACStreamEncoder.Create(aStream : TStream;
+  aDataLimits : TSoundDataLimits;
   aProps : ISoundEncoderProps; aComments : IOGGComment);
 begin
-  InitWriter(TOGLSound.NewStreamWriter(aStream));
+  InitStream(TOGLSound.NewDataStream(aStream, aDataLimits));
   inherited Create(aProps, aComments);
 end;
 
 procedure TFLACStreamEncoder.SetStream(aStream : TStream);
 begin
-  (Writer as TSoundStreamDataWriter).Stream := aStream;
+  (DataStream as TSoundDataStream).Stream := aStream;
 end;
 
 { TFLACOggEncoder }
@@ -1267,16 +1624,21 @@ end;
 procedure TFLACOggEncoder.InitFLACEncoder;
 begin
   fRef.SetOggSerialNumber(Random(Int64(Now)));
-  //fRef.InitOGGStream(@flac_enc_read, @flac_enc_write, @flac_enc_seek, @flac_enc_tell, @flac_enc_meta, Self);
-  fRef.InitOGGStream(nil, @flac_enc_write, nil, nil, @flac_enc_meta, Self);
+  if DataStream.Readable and DataStream.Seekable then
+    fRef.InitOGGStream(@flac_enc_read, @flac_enc_write,
+                                       @flac_enc_seek,
+                                       @flac_enc_tell,
+                                       @flac_enc_meta, Self) else
+    fRef.InitOGGStream(nil, @flac_enc_write, nil, nil, @flac_enc_meta, Self);
 end;
 
 { TFLACAbstractEncoder }
 
 procedure TFLACAbstractEncoder.InitFLACEncoder;
 begin
-  //fRef.InitStream(@flac_enc_write, @flac_enc_seek, @flac_enc_tell, @flac_enc_meta, Self);
-  fRef.InitStream(@flac_enc_write, nil, nil, @flac_enc_meta, Self);
+  if DataStream.Seekable then
+    fRef.InitStream(@flac_enc_write, @flac_enc_seek, @flac_enc_tell, @flac_enc_meta, Self) else
+    fRef.InitStream(@flac_enc_write, nil, nil, @flac_enc_meta, Self);
 end;
 
 procedure TFLACAbstractEncoder.Init(aProps : ISoundEncoderProps;
@@ -1316,7 +1678,7 @@ end;
 
 function TFLACAbstractEncoder.GetBitrate : Cardinal;
 begin
-  Result := 0;
+  Result := fRef.BitsPerSample * fRef.SampleRate;
 end;
 
 function TFLACAbstractEncoder.GetChannels : Cardinal;
@@ -1753,13 +2115,13 @@ end;
 function TFLACFile.InitEncoder(aProps : ISoundEncoderProps;
                                aComments : ISoundComment) : ISoundEncoder;
 begin
-  Result := TFLACStreamEncoder.Create(Stream, aProps,
+  Result := TFLACStreamEncoder.Create(Stream, DataLimits, aProps,
                                          aComments as IOGGComment) as ISoundEncoder;
 end;
 
 function TFLACFile.InitDecoder : ISoundDecoder;
 begin
-  Result := TFLACStreamDecoder.Create(Stream) as ISoundDecoder;
+  Result := TFLACStreamDecoder.Create(Stream, DataLimits) as ISoundDecoder;
 end;
 
 { TFLACOggFile }
@@ -1767,13 +2129,18 @@ end;
 function TFLACOggFile.InitEncoder(aProps : ISoundEncoderProps;
   aComments : ISoundComment) : ISoundEncoder;
 begin
-  Result := TFLACOggStreamEncoder.Create(Stream, aProps,
+  Result := TFLACOggStreamEncoder.Create(Stream, DataLimits, aProps,
                                          aComments as IOGGComment) as ISoundEncoder;
 end;
 
 function TFLACOggFile.InitDecoder : ISoundDecoder;
 begin
-  Result := TFLACOggStreamDecoder.Create(Stream) as ISoundDecoder;
+  Result := TFLACOggStreamDecoder.Create(Stream, DataLimits) as ISoundDecoder;
+end;
+
+class function TFLACOggFile.DefaultEncoderDataLimits : TSoundDataLimits;
+begin
+  Result := [];
 end;
 
 { TFLAC }
@@ -1784,36 +2151,29 @@ begin
 end;
 
 class function TFLAC.FLACOggStreamEncoder(aStream : TStream;
+  aDataLimits : TSoundDataLimits;
   aProps : ISoundEncoderProps; aComments : IOGGComment) : TFLACOggStreamEncoder;
 begin
-  Result := TFLACOggStreamEncoder.Create(aStream, aProps, aComments);
+  Result := TFLACOggStreamEncoder.Create(aStream, aDataLimits, aProps, aComments);
 end;
 
-class function TFLAC.FLACOggStreamDecoder(aStream : TStream) : TFLACOggStreamDecoder;
+class function TFLAC.FLACOggStreamDecoder(aStream : TStream;
+  aDataLimits : TSoundDataLimits) : TFLACOggStreamDecoder;
 begin
-  Result := TFLACOggStreamDecoder.Create(aStream);
+  Result := TFLACOggStreamDecoder.Create(aStream, aDataLimits);
 end;
 
 class function TFLAC.FLACStreamEncoder(aStream : TStream;
+  aDataLimits : TSoundDataLimits;
   aProps : ISoundEncoderProps; aComments: IOGGComment) : TFLACStreamEncoder;
 begin
-  Result := TFLACStreamEncoder.Create(aStream, aProps, aComments);
+  Result := TFLACStreamEncoder.Create(aStream, aDataLimits, aProps, aComments);
 end;
 
-class function TFLAC.FLACStreamDecoder(aStream : TStream
-  ) : TFLACStreamDecoder;
+class function TFLAC.FLACStreamDecoder(aStream : TStream;
+  aDataLimits : TSoundDataLimits) : TFLACStreamDecoder;
 begin
-  Result := TFLACStreamDecoder.Create(aStream);
-end;
-
-class function TFLAC.PROP_COMPR_LEVEL : Cardinal;
-begin
-  Result := $031;
-end;
-
-class function TFLAC.PROP_SUBSET : Cardinal;
-begin
-  Result := $032;
+  Result := TFLACStreamDecoder.Create(aStream, aDataLimits);
 end;
 
 class function TFLAC.FLACLibsLoad(const aFLACLibs : array of String

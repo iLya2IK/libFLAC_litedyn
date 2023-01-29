@@ -254,12 +254,12 @@ type
     number : FLAC__byte;
   end;        
 
-  FLAC__StreamMetadata_CueSheet_Track = record
+  FLAC__StreamMetadata_CueSheet_Track = bitpacked record
     offset : FLAC__uint64;
     number : FLAC__byte;
     isrc : Array [0..12] of cchar;
-    atype : boolean; //bitpacked
-    pre_emphasis : boolean; //bitpacked
+    atype : 0..1; //bitpacked
+    pre_emphasis : 0..1; //bitpacked
     num_indices : FLAC__byte;
     indices : pFLAC__StreamMetadata_CueSheet_Index;
   end;
