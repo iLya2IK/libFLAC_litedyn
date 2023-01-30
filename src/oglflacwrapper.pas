@@ -77,14 +77,8 @@ type
                              fcaRightSide,
                              fcaMidSide );
 
-  { IFLACComment }
-
-  IFLACComment = interface(IOGGComment)
-  ['{8C90A978-8544-4AE8-8164-ED856ED256B7}']
-  function GetVendor : String;
-  procedure SetVendor(const S : String);
-
-  property Vendor : String read GetVendor write SetVendor;
+  IFLACEncComment = interface(ISoundComment)
+  ['{4A617768-05E2-4C68-ACCF-002F93D45C7B}']
   end;
 
   { IFLACEncoder }
@@ -130,7 +124,7 @@ type
   procedure SetMaxResidualPartitionOrder(aValue: Cardinal);
   procedure SetRiceParameterSearchDist(aValue: Cardinal);
   procedure SetTotalSamplesEstimate(aValue: QWord);
-  //procedure SetMetadata(metadata: IFLACStreamMetadata; num_blocks: Cardinal);
+  procedure SetComments(comments : IFLACEncComment);
   procedure SetLimitMinBitrate(aValue: Boolean);
 
   function GetState: TFLACEncoderState;
@@ -255,52 +249,32 @@ type
   property MD5Checking : Boolean read GetMD5Checking write SetMD5Checking;
   end;
 
-  { TFLACVorbisTag }
+  { TFLACEncComment }
 
-  TFLACVorbisTag = class(TStringList)
+  TFLACEncComment = class(TNativeVorbisCommentCloneable, IFLACEncComment)
   private
-    FTag : String;
-  public
-    constructor Create(const aTag : String);
-
-    property Tag : String read FTag;
-  end;
-
-  { TFLACVorbisComment }
-
-  TFLACVorbisComment = class(specialize TFastBaseCollection<TFLACVorbisTag>)
-  private
-    FVendor : String;
-  public
-    procedure AddComment(const comment: String);
-    procedure AddTag(const atag, avalue: String);
-    function Tag(const aTag : String) : TFLACVorbisTag;
-    function CountAll : Integer;
-
-    property Vendor : String read FVendor write FVendor;
-  end;
-
-  { TFLACComment }
-
-  TFLACComment = class(TInterfacedObject, IFLACComment)
-  private
-    fRef : TFLACVorbisComment;
-
+    fMeta : pFLAC__StreamMetadata;
   protected
-    procedure Init;
-    procedure Done;
-    function GetVendor : String;
-    procedure SetVendor(const S : String);
-  public
-    function Ref : Pointer;
+    function GetVendor : String; override;
+    procedure SetVendor(const S : String); override;
 
-    constructor Create;
+    procedure SetNativeVendor(v : PChar); override;
+    function GetNativeVendor : PChar; override;
+    function GetNativeComment(index : integer) : PChar; override;
+    function GetNativeCommentLength(index : integer) : Int32; override;
+    function GetNativeCommentCount : Int32; override;
+
+    procedure Init; override;
+    procedure Done; override;
+  public
+    function Ref : Pointer; override;
+
     destructor Destroy; override;
 
-    procedure Add(const comment: String);
-    procedure AddTag(const tag, value: String);
-    function Query(const tag: String; index: integer): String;
-    function QueryCount(const tag: String): integer;
+    procedure Add(const comment: String); override;
+    procedure AddTag(const tag, value: String); override;
+    function Query(const tag: String; index: integer): String; override;
+    function QueryCount(const tag: String): integer; override;
   end;
 
   { TFLACEncoder }
@@ -375,7 +349,7 @@ type
 
     procedure SetOggSerialNumber(serial_number: Longint);
     procedure SetCompressionLevel(aValue: TFLACCompressionLevel);
-    //procedure SetMetadata(metadata: IFLACStreamMetadata; num_blocks: Cardinal);
+    procedure SetComments(comments : IFLACEncComment);
     function GetState: TFLACEncoderState;
     function GetVerifyDecoderState: TFLACStreamDecoderState;
     function GetResolvedStateString: String;
@@ -469,7 +443,7 @@ type
   TFLACAbstractEncoder = class(TSoundAbstractEncoder)
   private
     fRef : IFLACEncoder;
-    fComm : IOGGComment;
+    fComm : IFLACEncComment;
     fImBuf : Pointer;
   protected
     procedure InitFLACEncoder; virtual;
@@ -490,10 +464,10 @@ type
     function Ref : IFLACEncoder; inline;
 
     constructor Create(aProps : ISoundEncoderProps;
-                       aComments : IOGGComment);
+                       aComments : ISoundComment);
     destructor Destroy; override;
 
-    function  Comments : IOGGComment; override;
+    function  Comments : ISoundComment; override;
 
     function  WriteData(Buffer : Pointer; Count : ISoundFrameSize;
                        {%H-}Par : Pointer) : ISoundFrameSize; override;
@@ -514,7 +488,7 @@ type
   TFLACStreamEncoder = class(TFLACAbstractEncoder)
   public
     constructor Create(aStream : TStream; aDataLimits : TSoundDataLimits;
-      aProps : ISoundEncoderProps; aComments : IOGGComment);
+      aProps : ISoundEncoderProps; aComments : ISoundComment);
     procedure SetStream(aStream : TStream);
   end;
 
@@ -523,7 +497,7 @@ type
   TFLACOggStreamEncoder = class(TFLACOggEncoder)
   public
     constructor Create(aStream : TStream; aDataLimits : TSoundDataLimits;
-      aProps : ISoundEncoderProps; aComments : IOGGComment);
+      aProps : ISoundEncoderProps; aComments : ISoundComment);
     procedure SetStream(aStream : TStream);
   end;
 
@@ -532,7 +506,7 @@ type
   TFLACAbstractDecoder = class(TSoundAbstractDecoder)
   private
     fRef  : IFLACDecoder;
-    fComm : IOGGComment;
+    fComm : ISoundComment;
 
     FActiveBuffer : Pointer;
     fABSize, fABPos : Integer;
@@ -560,7 +534,7 @@ type
     constructor Create;
     destructor Destroy; override;
 
-    function  Comments : IOGGComment; override;
+    function  Comments : ISoundComment; override;
 
     function ReadData(Buffer : Pointer; Count : ISoundFrameSize;
                        {%H-}Par : Pointer) : ISoundFrameSize; override;
@@ -621,15 +595,16 @@ type
 
   TFLAC = class
   public
-    class function NewComment : IFLACComment;
+    class function NewEncComment : IFLACEncComment;
+    class function NewEncComment(aSrc : ISoundComment) : IFLACEncComment;
     class function FLACOggStreamEncoder(aStream : TStream;
         aDataLimits : TSoundDataLimits; aProps : ISoundEncoderProps;
-        aComments : IOGGComment) : TFLACOggStreamEncoder;
+        aComments : ISoundComment) : TFLACOggStreamEncoder;
     class function FLACOggStreamDecoder(aStream : TStream;
         aDataLimits : TSoundDataLimits) : TFLACOggStreamDecoder;
     class function FLACStreamEncoder(aStream : TStream;
         aDataLimits : TSoundDataLimits; aProps : ISoundEncoderProps;
-        aComments : IOGGComment) : TFLACStreamEncoder;
+        aComments : ISoundComment) : TFLACStreamEncoder;
     class function FLACStreamDecoder(aStream : TStream;
         aDataLimits : TSoundDataLimits) : TFLACStreamDecoder;
 
@@ -845,7 +820,7 @@ begin
   end;
 end;
 
-function FLA_VorbisComment_Entry_to_Str(const entry : FLAC__StreamMetadata_VorbisComment_Entry) : string;
+function FLAC_VorbisComment_Entry_to_Str(const entry : FLAC__StreamMetadata_VorbisComment_Entry) : string;
 begin
   if entry.length > 0 then
   begin
@@ -853,6 +828,15 @@ begin
     Move(entry.entry^, Result[1], entry.length);
   end else
     Result := '';
+end;
+
+function Str_to_FLAC_VorbisComment_Entry(const str : String) : FLAC__StreamMetadata_VorbisComment_Entry;
+begin
+  Result.length := Length(str);
+  Result.entry := GetMem(Result.length + 1);
+  if Result.length > 0 then
+    Move(str[1], Result.entry^, Result.length);
+  Result.entry[Result.length] := 0;
 end;
 
 procedure flac_dec_meta (
@@ -873,14 +857,14 @@ begin
     FLAC__METADATA_TYPE_VORBIS_COMMENT:
     begin
       //write metadata to comments here
-      (TFLACAbstractDecoder(client_data).Comments as IFLACComment).Vendor :=
-                                     FLA_VorbisComment_Entry_to_Str(metadata^.data.vorbis_comment.vendor_string);
+      (TFLACAbstractDecoder(client_data).Comments as ISoundComment).Vendor :=
+                                     FLAC_VorbisComment_Entry_to_Str(metadata^.data.vorbis_comment.vendor_string);
       if metadata^.data.vorbis_comment.num_comments > 0 then
       begin
         p := metadata^.data.vorbis_comment.comments;
         for i := 0 to metadata^.data.vorbis_comment.num_comments-1 do
         begin
-          (TFLACAbstractDecoder(client_data).Comments as IFLACComment).Add(FLA_VorbisComment_Entry_to_Str(p^));
+          (TFLACAbstractDecoder(client_data).Comments as ISoundComment).Add(FLAC_VorbisComment_Entry_to_Str(p^));
           Inc(p);
         end;
       end;
@@ -896,65 +880,146 @@ begin
   //todo: proceed the error here (raise exception)
 end;
 
-{ TFLACVorbisComment }
+{ TFLACEncComment }
 
-procedure TFLACVorbisComment.AddComment(const comment : String);
-var
-  aTag, aValue : String;
-  P : Integer;
+function TFLACEncComment.GetVendor : String;
 begin
-  P := Pos('=', comment);
-  if P > 0 then
-  begin
-    aTag := Copy(comment, 1, P - 1).Trim;
-    aValue := Copy(comment, P + 1, Length(comment)).Trim;
-    AddTag(aTag, aValue);
+  Result := FLAC_VorbisComment_Entry_to_Str(fMeta^.data.vorbis_comment.vendor_string);
+end;
+
+procedure TFLACEncComment.SetVendor(const S : String);
+var
+  entry : FLAC__StreamMetadata_VorbisComment_Entry;
+begin
+  entry := Str_to_FLAC_VorbisComment_Entry(S);
+  try
+    FLAC__metadata_object_vorbiscomment_set_vendor_string(fMeta, entry, FLAC__true);
+  finally
+    Freemem(entry.entry);
   end;
 end;
 
-procedure TFLACVorbisComment.AddTag(const atag, avalue : String);
-var
-  t : TFLACVorbisTag;
+procedure TFLACEncComment.SetNativeVendor(v : PChar);
 begin
-  t := Tag(atag);
-  if not Assigned(t) then
-  begin
-    t := TFLACVorbisTag.Create(atag);
-    Add(t);
-  end;
-  t.Add(avalue);
+  { ignore }
 end;
 
-function TFLACVorbisComment.Tag(const aTag : String) : TFLACVorbisTag;
-var i : integer;
+function TFLACEncComment.GetNativeVendor : PChar;
 begin
-  for i := 0 to Count-1 do
+  Result := PChar(fMeta^.data.vorbis_comment.vendor_string.entry);
+end;
+
+function TFLACEncComment.GetNativeComment(index : integer) : PChar;
+begin
+  Result := PChar( fMeta^.data.vorbis_comment.comments[index].entry );
+end;
+
+function TFLACEncComment.GetNativeCommentLength(index : integer) : Int32;
+begin
+  Result := fMeta^.data.vorbis_comment.comments[index].length;
+end;
+
+function TFLACEncComment.GetNativeCommentCount : Int32;
+begin
+  Result := fMeta^.data.vorbis_comment.num_comments;
+end;
+
+procedure TFLACEncComment.Init;
+begin
+  fMeta := FLAC__metadata_object_new(FLAC__METADATA_TYPE_VORBIS_COMMENT);
+end;
+
+procedure TFLACEncComment.Done;
+begin
+  if Assigned(fMeta) then
   begin
-    if SameText(Self[i].Tag, aTag) then
+    FLAC__metadata_object_delete(fMeta);
+    fMeta := nil;
+  end;
+end;
+
+function TFLACEncComment.Ref : Pointer;
+begin
+  Result := @fMeta;
+end;
+
+destructor TFLACEncComment.Destroy;
+begin
+  Done;
+  inherited Destroy;
+end;
+
+procedure TFLACEncComment.Add(const comment : String);
+var
+  entry : FLAC__StreamMetadata_VorbisComment_Entry;
+begin
+  entry := Str_to_FLAC_VorbisComment_Entry(comment);
+  try
+    if FLAC__metadata_object_vorbiscomment_append_comment(fMeta, entry, FLAC__true) = FLAC__true then
     begin
-      Result := Self[i];
-      Exit;
+      inherited Add(comment);
+    end;
+  finally
+    Freemem(entry.entry);
+  end;
+end;
+
+procedure TFLACEncComment.AddTag(const tag, value : String);
+var
+  V : String;
+begin
+  V := tag.ToUpper + '=' + value;
+  Add(V);
+end;
+
+function TFLACEncComment.Query(const tag : String; index : integer) : String;
+var
+  i, L, c : integer;
+  v : pFLAC__StreamMetadata_VorbisComment;
+  ve : pFLAC__StreamMetadata_VorbisComment_Entry;
+begin
+  L := Length(tag);
+  v := @(fMeta^.data.vorbis_comment);
+  c := 0;
+  for i := 0 to int32(v^.num_comments)-1 do
+  begin
+    ve := @(v^.comments[i]);
+    if ve^.length > L then
+    begin
+      if CompareByte(ve^.entry^, tag[1], L) = 0 then
+      begin
+        if (c = index) then
+        begin
+          Result := FLAC_VorbisComment_Entry_to_Str(ve^);
+          Exit;
+        end;
+        Inc(c);
+      end;
     end;
   end;
-  Result := nil;
+  Result := '';
 end;
 
-function TFLACVorbisComment.CountAll : Integer;
-var i : integer;
+function TFLACEncComment.QueryCount(const tag : String) : integer;
+var
+  i, L : integer;
+  v : pFLAC__StreamMetadata_VorbisComment;
+  ve : pFLAC__StreamMetadata_VorbisComment_Entry;
 begin
+  L := Length(tag);
+  v := @(fMeta^.data.vorbis_comment);
   Result := 0;
-  for i := 0 to Count-1 do
+  for i := 0 to int32(v^.num_comments)-1 do
   begin
-    Inc(Result, Self[i].Count);
+    ve := @(v^.comments[i]);
+    if ve^.length > L then
+    begin
+      if CompareByte(ve^.entry^, tag[1], L) = 0 then
+      begin
+        Inc(Result);
+      end;
+    end;
   end;
-end;
-
-{ TFLACVorbisTag }
-
-constructor TFLACVorbisTag.Create(const aTag : String);
-begin
-  inherited Create;
-  FTag := aTag;
 end;
 
 { TFLACStreamDecoder }
@@ -1069,7 +1134,7 @@ end;
 
 procedure TFLACAbstractDecoder.Init;
 begin
-  fComm := TFLAC.NewComment;
+  fComm := TOGLSound.NewVorbisComment;
   FActiveBuffer := nil;
   fABSize := 0;
   fOverBuffer := GetMem(DefaultOverflowBufferSize);
@@ -1136,7 +1201,7 @@ begin
   inherited Destroy;
 end;
 
-function TFLACAbstractDecoder.Comments : IOGGComment;
+function TFLACAbstractDecoder.Comments : ISoundComment;
 begin
   Result := fComm;
 end;
@@ -1504,96 +1569,11 @@ begin
   Result := FLAC__stream_decoder_seek_absolute(fRef, sample) > 0;
 end;
 
-{ TFLACComment }
-
-function TFLACComment.Ref : Pointer;
-begin
-  Result := Pointer(fRef);
-end;
-
-constructor TFLACComment.Create;
-begin
-  Init;
-end;
-
-destructor TFLACComment.Destroy;
-begin
-  Done;
-  inherited Destroy;
-end;
-
-procedure TFLACComment.Init;
-begin
-  fRef := TFLACVorbisComment.Create;
-end;
-
-procedure TFLACComment.Done;
-begin
-  fRef.Free;
-end;
-
-function TFLACComment.GetVendor : String;
-begin
-  Result := fRef.Vendor;
-end;
-
-procedure TFLACComment.SetVendor(const S : String);
-begin
-  fRef.Vendor := S;
-end;
-
-procedure TFLACComment.Add(const comment : String);
-begin
-  fRef.AddComment(comment);
-end;
-
-procedure TFLACComment.AddTag(const tag, value : String);
-begin
-  fRef.AddTag(tag, value);
-end;
-
-function TFLACComment.Query(const tag : String; index : integer) : String;
-var
-  t : TFLACVorbisTag;
-begin
-  if index < 0 then
-    Result := ''
-  else
-  begin
-    t := fRef.Tag(tag);
-    if Assigned(t) then
-    begin
-      if t.Count > index then
-      begin
-        Result := t[index];
-      end else
-        Result := '';
-    end else
-    begin
-      Result := '';
-    end;
-  end;
-end;
-
-function TFLACComment.QueryCount(const tag : String) : integer;
-var
-  t : TFLACVorbisTag;
-begin
-  t := fRef.Tag(tag);
-  if Assigned(t) then
-  begin
-    Result := t.Count;
-  end else
-  begin
-    Result := 0;
-  end;
-end;
-
 { TFLACOggStreamEncoder }
 
 constructor TFLACOggStreamEncoder.Create(aStream : TStream;
   aDataLimits : TSoundDataLimits;
-  aProps : ISoundEncoderProps; aComments : IOGGComment);
+  aProps : ISoundEncoderProps; aComments : ISoundComment);
 begin
   InitStream(TOGLSound.NewDataStream(aStream, aDataLimits));
   inherited Create(aProps, aComments);
@@ -1608,7 +1588,7 @@ end;
 
 constructor TFLACStreamEncoder.Create(aStream : TStream;
   aDataLimits : TSoundDataLimits;
-  aProps : ISoundEncoderProps; aComments : IOGGComment);
+  aProps : ISoundEncoderProps; aComments : ISoundComment);
 begin
   InitStream(TOGLSound.NewDataStream(aStream, aDataLimits));
   inherited Create(aProps, aComments);
@@ -1658,8 +1638,10 @@ begin
     fImBuf := nil;
 
   if Assigned(aComments) then
-    fComm := aComments as IOGGComment else
-    fComm := TFLAC.NewComment;
+    fComm := TFLAC.NewEncComment(aComments) else
+    fComm := TFLAC.NewEncComment();
+  fRef.SetComments(fComm);
+
   InitFLACEncoder;
 end;
 
@@ -1717,7 +1699,7 @@ begin
 end;
 
 constructor TFLACAbstractEncoder.Create(aProps : ISoundEncoderProps;
-  aComments : IOGGComment);
+  aComments : ISoundComment);
 begin
   Init(aProps, aComments);
 end;
@@ -1728,7 +1710,7 @@ begin
   inherited Destroy;
 end;
 
-function TFLACAbstractEncoder.Comments : IOGGComment;
+function TFLACAbstractEncoder.Comments : ISoundComment;
 begin
   Result := fComm;
 end;
@@ -2067,6 +2049,11 @@ begin
   FLAC__stream_encoder_set_compression_level(fRef, Integer(aValue));
 end;
 
+procedure TFLACEncoder.SetComments(comments : IFLACEncComment);
+begin
+  FLAC__stream_encoder_set_metadata(fRef, ppFLAC__StreamMetadata(comments.Ref), 1);
+end;
+
 function TFLACEncoder.GetState : TFLACEncoderState;
 begin
   Result := TFLACEncoderState(FLAC__stream_encoder_get_state(fRef));
@@ -2116,7 +2103,7 @@ function TFLACFile.InitEncoder(aProps : ISoundEncoderProps;
                                aComments : ISoundComment) : ISoundEncoder;
 begin
   Result := TFLACStreamEncoder.Create(Stream, DataLimits, aProps,
-                                         aComments as IOGGComment) as ISoundEncoder;
+                                         aComments as ISoundComment) as ISoundEncoder;
 end;
 
 function TFLACFile.InitDecoder : ISoundDecoder;
@@ -2130,7 +2117,7 @@ function TFLACOggFile.InitEncoder(aProps : ISoundEncoderProps;
   aComments : ISoundComment) : ISoundEncoder;
 begin
   Result := TFLACOggStreamEncoder.Create(Stream, DataLimits, aProps,
-                                         aComments as IOGGComment) as ISoundEncoder;
+                                         aComments as ISoundComment) as ISoundEncoder;
 end;
 
 function TFLACOggFile.InitDecoder : ISoundDecoder;
@@ -2145,14 +2132,22 @@ end;
 
 { TFLAC }
 
-class function TFLAC.NewComment : IFLACComment;
+class function TFLAC.NewEncComment : IFLACEncComment;
 begin
-  Result := TFLACComment.Create as IFLACComment;
+  Result := TFLACEncComment.Create as IFLACEncComment;
+end;
+
+class function TFLAC.NewEncComment(aSrc : ISoundComment) : IFLACEncComment;
+begin
+  if aSrc is IFLACEncComment then
+    Result := aSrc as IFLACEncComment
+  else
+    Result := TFLACEncComment.CreateFromInterface(aSrc) as IFLACEncComment;
 end;
 
 class function TFLAC.FLACOggStreamEncoder(aStream : TStream;
   aDataLimits : TSoundDataLimits;
-  aProps : ISoundEncoderProps; aComments : IOGGComment) : TFLACOggStreamEncoder;
+  aProps : ISoundEncoderProps; aComments : ISoundComment) : TFLACOggStreamEncoder;
 begin
   Result := TFLACOggStreamEncoder.Create(aStream, aDataLimits, aProps, aComments);
 end;
@@ -2165,7 +2160,7 @@ end;
 
 class function TFLAC.FLACStreamEncoder(aStream : TStream;
   aDataLimits : TSoundDataLimits;
-  aProps : ISoundEncoderProps; aComments: IOGGComment) : TFLACStreamEncoder;
+  aProps : ISoundEncoderProps; aComments: ISoundComment) : TFLACStreamEncoder;
 begin
   Result := TFLACStreamEncoder.Create(aStream, aDataLimits, aProps, aComments);
 end;

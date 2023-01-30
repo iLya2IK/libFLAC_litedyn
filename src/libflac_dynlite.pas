@@ -239,9 +239,10 @@ type
   pFLAC__StreamMetadata_VorbisComment_Entry = ^FLAC__StreamMetadata_VorbisComment_Entry;
   FLAC__StreamMetadata_VorbisComment_Entry = record
     length : FLAC__uint32;
-    entry : pFLAC__byte;    
+    entry  : pFLAC__byte;
   end;    
 
+  pFLAC__StreamMetadata_VorbisComment = ^FLAC__StreamMetadata_VorbisComment;
   FLAC__StreamMetadata_VorbisComment = record
     vendor_string : FLAC__StreamMetadata_VorbisComment_Entry;
     num_comments : FLAC__uint32;  
@@ -280,6 +281,7 @@ type
  	FLAC__StreamMetadata_Unknown unknown;}
   end;
 
+  ppFLAC__StreamMetadata = ^pFLAC__StreamMetadata;
   pFLAC__StreamMetadata = ^FLAC__StreamMetadata;
   FLAC__StreamMetadata = record
      atype : FLAC__MetadataType;
@@ -498,6 +500,17 @@ const
   FLAC__STREAM_ENCODER_TELL_STATUS_ERROR = 1;
   FLAC__STREAM_ENCODER_TELL_STATUS_UNSUPPORTED = 2;
 
+{ metadata.h }
+
+function FLAC__metadata_object_new(atype : FLAC__MetadataType) : pFLAC__StreamMetadata;
+function FLAC__metadata_object_clone(const aobject : pFLAC__StreamMetadata) : pFLAC__StreamMetadata;
+procedure FLAC__metadata_object_delete(aobject : pFLAC__StreamMetadata);
+
+function FLAC__metadata_object_vorbiscomment_set_vendor_string(aobject : pFLAC__StreamMetadata; entry : FLAC__StreamMetadata_VorbisComment_Entry; copy : FLAC__bool) : FLAC__bool;
+function FLAC__metadata_object_vorbiscomment_resize_comments(aobject : pFLAC__StreamMetadata; new_num_comments : cuint32) : FLAC__bool;
+function FLAC__metadata_object_vorbiscomment_set_comment(aobject : pFLAC__StreamMetadata; comment_num : cuint32; entry : FLAC__StreamMetadata_VorbisComment_Entry; copy : FLAC__bool) : FLAC__bool;
+function FLAC__metadata_object_vorbiscomment_append_comment(aobject : pFLAC__StreamMetadata; entry : FLAC__StreamMetadata_VorbisComment_Entry; copy : FLAC__bool) : FLAC__bool;
+
 { stream_encoder.h }  
 
 function FLAC__stream_decoder_new(): pFLAC__StreamDecoder;
@@ -576,7 +589,7 @@ function FLAC__stream_encoder_set_min_residual_partition_order(encoder: pFLAC__S
 function FLAC__stream_encoder_set_max_residual_partition_order(encoder: pFLAC__StreamEncoder; value: cuint32): FLAC__bool;
 function FLAC__stream_encoder_set_rice_parameter_search_dist(encoder: pFLAC__StreamEncoder; value: cuint32): FLAC__bool;
 function FLAC__stream_encoder_set_total_samples_estimate(encoder: pFLAC__StreamEncoder; value: FLAC__uint64): FLAC__bool;
-function FLAC__stream_encoder_set_metadata(encoder: pFLAC__StreamEncoder; metadata: pFLAC__StreamMetadata; num_blocks: cuint32): FLAC__bool;
+function FLAC__stream_encoder_set_metadata(encoder: pFLAC__StreamEncoder; metadata: ppFLAC__StreamMetadata; num_blocks: cuint32): FLAC__bool;
 function FLAC__stream_encoder_set_limit_min_bitrate(encoder: pFLAC__StreamEncoder; value: FLAC__bool): FLAC__bool;
 function FLAC__stream_encoder_get_state(const encoder: pFLAC__StreamEncoder): FLAC__StreamEncoderState;
 function FLAC__stream_encoder_get_verify_decoder_state(const encoder: pFLAC__StreamEncoder): FLAC__StreamDecoderState;
@@ -642,6 +655,14 @@ resourcestring
   SFailedToLoadFLAC = 'Failed to load FLAC library';
 
 type
+  p_FLAC__metadata_object_new = function (atype : FLAC__MetadataType) : pFLAC__StreamMetadata; cdecl;
+  p_FLAC__metadata_object_clone = function (const aobject : pFLAC__StreamMetadata) : pFLAC__StreamMetadata; cdecl;
+  p_FLAC__metadata_object_delete = procedure (aobject : pFLAC__StreamMetadata); cdecl;
+
+  p_FLAC__metadata_object_vorbiscomment_set_vendor_string = function (aobject : pFLAC__StreamMetadata; entry : FLAC__StreamMetadata_VorbisComment_Entry; copy : FLAC__bool) : FLAC__bool; cdecl;
+  p_FLAC__metadata_object_vorbiscomment_resize_comments = function (aobject : pFLAC__StreamMetadata; new_num_comments : cuint32) : FLAC__bool; cdecl;
+  p_FLAC__metadata_object_vorbiscomment_set_comment = function (aobject : pFLAC__StreamMetadata; comment_num : cuint32; entry : FLAC__StreamMetadata_VorbisComment_Entry; copy : FLAC__bool) : FLAC__bool; cdecl;
+  p_FLAC__metadata_object_vorbiscomment_append_comment = function (aobject : pFLAC__StreamMetadata; entry : FLAC__StreamMetadata_VorbisComment_Entry; copy : FLAC__bool) : FLAC__bool; cdecl;
 
   p_FLAC__stream_decoder_new = function(): pFLAC__StreamDecoder; cdecl;
   p_FLAC__stream_decoder_delete = procedure(decoder: pFLAC__StreamDecoder); cdecl;
@@ -698,7 +719,7 @@ type
   p_FLAC__stream_encoder_set_max_residual_partition_order = function(encoder: pFLAC__StreamEncoder; value: cuint32): FLAC__bool; cdecl;
   p_FLAC__stream_encoder_set_rice_parameter_search_dist = function(encoder: pFLAC__StreamEncoder; value: cuint32): FLAC__bool; cdecl;
   p_FLAC__stream_encoder_set_total_samples_estimate = function(encoder: pFLAC__StreamEncoder; value: FLAC__uint64): FLAC__bool; cdecl;
-  p_FLAC__stream_encoder_set_metadata = function(encoder: pFLAC__StreamEncoder; metadata: pFLAC__StreamMetadata; num_blocks: cuint32): FLAC__bool; cdecl;
+  p_FLAC__stream_encoder_set_metadata = function(encoder: pFLAC__StreamEncoder; metadata: ppFLAC__StreamMetadata; num_blocks: cuint32): FLAC__bool; cdecl;
   p_FLAC__stream_encoder_set_limit_min_bitrate = function(encoder: pFLAC__StreamEncoder; value: FLAC__bool): FLAC__bool; cdecl;
   p_FLAC__stream_encoder_get_state = function(const encoder: pFLAC__StreamEncoder): FLAC__StreamEncoderState; cdecl;
   p_FLAC__stream_encoder_get_verify_decoder_state = function(const encoder: pFLAC__StreamEncoder): FLAC__StreamDecoderState; cdecl;
@@ -731,6 +752,14 @@ type
   p_FLAC__stream_encoder_process_interleaved = function(encoder: pFLAC__StreamEncoder; const buffer: pFLAC__int32; samples: cuint32): FLAC__bool; cdecl;
 
 var
+  _FLAC__metadata_object_new   :p_FLAC__metadata_object_new   =nil;
+  _FLAC__metadata_object_clone :p_FLAC__metadata_object_clone =nil;
+  _FLAC__metadata_object_delete:p_FLAC__metadata_object_delete=nil;
+
+  _FLAC__metadata_object_vorbiscomment_set_vendor_string : p_FLAC__metadata_object_vorbiscomment_set_vendor_string = nil;
+  _FLAC__metadata_object_vorbiscomment_resize_comments  : p_FLAC__metadata_object_vorbiscomment_resize_comments = nil;
+  _FLAC__metadata_object_vorbiscomment_set_comment      : p_FLAC__metadata_object_vorbiscomment_set_comment = nil;
+  _FLAC__metadata_object_vorbiscomment_append_comment   : p_FLAC__metadata_object_vorbiscomment_append_comment = nil;
 
   _FLAC__stream_decoder_new: p_FLAC__stream_decoder_new = nil;
   _FLAC__stream_decoder_delete: p_FLAC__stream_decoder_delete = nil;
@@ -888,6 +917,15 @@ end;
 
 procedure LoadFLACEntryPoints;
 begin
+  _FLAC__metadata_object_new    := p_FLAC__metadata_object_new(GetProcAddr(FLACLib, 'FLAC__metadata_object_new'));
+  _FLAC__metadata_object_clone  := p_FLAC__metadata_object_clone(GetProcAddr(FLACLib, 'FLAC__metadata_object_clone'));
+  _FLAC__metadata_object_delete := p_FLAC__metadata_object_delete(GetProcAddr(FLACLib, 'FLAC__metadata_object_delete'));
+
+  _FLAC__metadata_object_vorbiscomment_set_vendor_string := p_FLAC__metadata_object_vorbiscomment_set_vendor_string(GetProcAddr(FLACLib, 'FLAC__metadata_object_vorbiscomment_set_vendor_string'));
+  _FLAC__metadata_object_vorbiscomment_resize_comments   := p_FLAC__metadata_object_vorbiscomment_resize_comments(GetProcAddr(FLACLib, 'FLAC__metadata_object_vorbiscomment_resize_comments'));
+  _FLAC__metadata_object_vorbiscomment_set_comment       := p_FLAC__metadata_object_vorbiscomment_set_comment(GetProcAddr(FLACLib, 'FLAC__metadata_object_vorbiscomment_set_comment'));
+  _FLAC__metadata_object_vorbiscomment_append_comment    := p_FLAC__metadata_object_vorbiscomment_append_comment(GetProcAddr(FLACLib, 'FLAC__metadata_object_vorbiscomment_append_comment'));
+
   _FLAC__stream_decoder_new := p_FLAC__stream_decoder_new(GetProcAddr(FLACLib, 'FLAC__stream_decoder_new'));
   _FLAC__stream_decoder_delete := p_FLAC__stream_decoder_delete(GetProcAddr(FLACLib, 'FLAC__stream_decoder_delete'));
   _FLAC__stream_decoder_set_ogg_serial_number := p_FLAC__stream_decoder_set_ogg_serial_number(GetProcAddr(FLACLib, 'FLAC__stream_decoder_set_ogg_serial_number'));
@@ -978,6 +1016,15 @@ end;
 
 procedure ClearFLACEntryPoints;
 begin
+  _FLAC__metadata_object_new    := nil;
+  _FLAC__metadata_object_clone  := nil;
+  _FLAC__metadata_object_delete := nil;
+
+  _FLAC__metadata_object_vorbiscomment_set_vendor_string := nil;
+  _FLAC__metadata_object_vorbiscomment_resize_comments   := nil;
+  _FLAC__metadata_object_vorbiscomment_set_comment       := nil;
+  _FLAC__metadata_object_vorbiscomment_append_comment    := nil;
+
   _FLAC__stream_decoder_new := nil;
   _FLAC__stream_decoder_delete := nil;
   _FLAC__stream_decoder_set_ogg_serial_number := nil;
@@ -1092,6 +1139,71 @@ begin
   Result := True;
 end;
 
+function FLAC__metadata_object_new(atype : FLAC__MetadataType
+  ) : pFLAC__StreamMetadata;
+begin
+  if Assigned(_FLAC__metadata_object_new) then
+    Result := _FLAC__metadata_object_new(atype)
+  else
+    Result := nil;
+end;
+
+function FLAC__metadata_object_clone(const aobject : pFLAC__StreamMetadata
+  ) : pFLAC__StreamMetadata;
+begin
+  if Assigned(_FLAC__metadata_object_clone) then
+    Result := _FLAC__metadata_object_clone(aobject)
+  else
+    Result := nil;
+end;
+
+procedure FLAC__metadata_object_delete(aobject : pFLAC__StreamMetadata);
+begin
+  if Assigned(_FLAC__metadata_object_delete) then
+     _FLAC__metadata_object_delete(aobject);
+end;
+
+function FLAC__metadata_object_vorbiscomment_set_vendor_string(
+  aobject : pFLAC__StreamMetadata;
+  entry : FLAC__StreamMetadata_VorbisComment_Entry; copy : FLAC__bool
+  ) : FLAC__bool;
+begin
+  if Assigned(_FLAC__metadata_object_vorbiscomment_set_vendor_string) then
+    Result := _FLAC__metadata_object_vorbiscomment_set_vendor_string(aobject, entry, copy)
+  else
+    Result := FLAC__false;
+end;
+
+function FLAC__metadata_object_vorbiscomment_resize_comments(
+  aobject : pFLAC__StreamMetadata; new_num_comments : cuint32) : FLAC__bool;
+begin
+  if Assigned(_FLAC__metadata_object_vorbiscomment_resize_comments) then
+    Result := _FLAC__metadata_object_vorbiscomment_resize_comments(aobject, new_num_comments)
+  else
+    Result := FLAC__false;
+end;
+
+function FLAC__metadata_object_vorbiscomment_set_comment(
+  aobject : pFLAC__StreamMetadata; comment_num : cuint32;
+  entry : FLAC__StreamMetadata_VorbisComment_Entry; copy : FLAC__bool
+  ) : FLAC__bool;
+begin
+  if Assigned(_FLAC__metadata_object_vorbiscomment_set_comment) then
+    Result := _FLAC__metadata_object_vorbiscomment_set_comment(aobject, comment_num, entry, copy)
+  else
+    Result := FLAC__false;
+end;
+
+function FLAC__metadata_object_vorbiscomment_append_comment(
+  aobject : pFLAC__StreamMetadata;
+  entry : FLAC__StreamMetadata_VorbisComment_Entry; copy : FLAC__bool
+  ) : FLAC__bool;
+begin
+  if Assigned(_FLAC__metadata_object_vorbiscomment_append_comment) then
+    Result := _FLAC__metadata_object_vorbiscomment_append_comment(aobject, entry, copy)
+  else
+    Result := FLAC__false;
+end;
 
 function FLAC__stream_decoder_new(): pFLAC__StreamDecoder;
 begin
@@ -1529,7 +1641,8 @@ begin
     Result := FLAC__false;
 end;
 
-function FLAC__stream_encoder_set_metadata(encoder: pFLAC__StreamEncoder; metadata: pFLAC__StreamMetadata; num_blocks: cuint32): FLAC__bool;
+function FLAC__stream_encoder_set_metadata(encoder : pFLAC__StreamEncoder;
+  metadata : ppFLAC__StreamMetadata; num_blocks : cuint32) : FLAC__bool;
 begin
   if Assigned(_FLAC__stream_encoder_set_metadata) then
     Result := _FLAC__stream_encoder_set_metadata(encoder, metadata, num_blocks)

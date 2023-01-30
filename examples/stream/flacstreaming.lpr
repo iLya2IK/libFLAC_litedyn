@@ -36,6 +36,9 @@ const // the name of source FLAC-ogg file
       // duration of data chunk to encode
       cChunckDuration : Integer = 500; // 0.5 second
       cChunckSize     : Integer = 4096;
+      {$ifdef DEBUG}
+      cHeapTrace = 'heaptrace.trc';
+      {$endif}
 
 var
   oggf : TFLACOggFile; // interface to encode/decode FLAC-Ogg data
@@ -54,6 +57,12 @@ var
 
   aEncProps : ISoundEncoderProps; // encoder properties
 begin
+  {$ifdef DEBUG}
+  if FileExists(cHeapTrace) then
+     DeleteFile(cHeapTrace);
+  SetHeapTraceOutput(cHeapTrace);
+  {$endif}
+
   // Initialize FLAC, FLACenc, FLACfile interfaces - load libraries
   {$ifdef Windows}
   if TFLAC.FLACLibsLoad([cFLACDLL]) then

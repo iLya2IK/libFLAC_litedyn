@@ -113,6 +113,7 @@ function TOALFLACDataRecorder.SaveToFile(const Fn : String) : Boolean;
 var
   channels : Cardinal;
   ss : TSoundSampleSize;
+  comments : ISoundComment;
 begin
   case Format of
   oalfMono8 :
@@ -137,12 +138,17 @@ begin
     end;
   end;
 
+
+  comments := TFLAC.NewEncComment;
+  comments.Vendor := 'OALFLACDataRecorder';
+  comments.AddTag(COMMENT_ARTIST, 'Your voice');
+  comments.AddTag(COMMENT_TITLE,  'Record');
   Result := FStream.SaveToFile(Fn,
                        TOGLSound.EncProps([TOGLSound.PROP_CHANNELS,  channels,
                                            TOGLSound.PROP_FREQUENCY, Frequency,
                                            TOGLSound.PROP_SAMPLE_SIZE, ss,
                                            TFLAC.PROP_COMPR_LEVEL, fclLevel5]),
-                                           nil);
+                                           comments);
 end;
 
 function TOALFLACDataRecorder.SaveToStream(Str : TStream) : Boolean;
@@ -169,12 +175,21 @@ const // name of file to capture data
       cOALDLL = '..\libs\soft_oal.dll';
       cFLACDLL = '..\libs\flac.dll';
       {$endif}
+      {$ifdef DEBUG}
+      cHeapTrace = 'heaptrace.trc';
+      {$endif}
 
 var
   OALCapture : TOALCapture; // OpenAL audio recoder
   OALPlayer  : TOALPlayer;  // OpenAL audio player
   dt: Integer;
 begin
+  {$ifdef DEBUG}
+  if FileExists(cHeapTrace) then
+     DeleteFile(cHeapTrace);
+  SetHeapTraceOutput(cHeapTrace);
+  {$endif}
+
   // Open FLAC, Ogg, OpenAL libraries and initialize interfaces
   {$ifdef Windows}
   if TOpenAL.OALLibsLoad([cOALDLL]) and TFLAC.FLACLibsLoad([cFLACDLL]) then
