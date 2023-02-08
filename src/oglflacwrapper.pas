@@ -514,7 +514,11 @@ type
     fOverBuffer : Pointer;
     fOBSize, fOBPos : Integer;
 
+    FDecodedSamples : Integer;
+
     procedure ReadMetadata;
+    procedure ResetReading;
+    procedure DoSeekAbsolute(aSample : Integer);
   protected
     procedure WriteFLAC(const frame : pFLAC__Frame; data : PPointer);
     procedure InitFLACDecoder; virtual;
@@ -787,6 +791,7 @@ begin
   if TFLACAbstractEncoder(client_data).DataStream.Seekable then
   begin
     stream_length^ := TFLACAbstractEncoder(client_data).DataStream.Size;
+    Result := FLAC__STREAM_DECODER_LENGTH_STATUS_OK;
   end
   else
     Result := FLAC__STREAM_DECODER_LENGTH_STATUS_UNSUPPORTED;
@@ -1068,6 +1073,35 @@ begin
     raise EFLAC.Create(cFLACWrongMetadata);
 end;
 
+procedure TFLACAbstractDecoder.ResetReading;
+begin
+  fOBSize := 0;
+  fOBPos  := 0;
+  fABSize := 0;
+  fABPos  := 0;
+end;
+
+procedure TFLACAbstractDecoder.DoSeekAbsolute(aSample : Integer);
+var
+  nsamples : Integer;
+begin
+  ResetReading;
+  nsamples := fRef.GetTotalSamples;
+  if aSample >= nsamples then
+  begin
+    if nsamples > 0 then
+       aSample := nsamples - 1
+    else
+       aSample := 0;
+  end;
+  if not fRef.SeekAbsolute(aSample) then
+  begin
+    if (fRef.GetState = fsdsSeekError) then
+      fRef.Flush;
+  end else
+    FDecodedSamples := aSample;
+end;
+
 procedure TFLACAbstractDecoder.WriteFLAC(const frame : pFLAC__Frame;
   data : PPointer);
 var
@@ -1081,6 +1115,8 @@ begin
     samples := frame^.header.blocksize;
     ssize := TOGLSound.SampleSizeToBytedepth(ss) * frame^.header.channels;
     if ssize = 0 then Exit;
+
+    Inc(FDecodedSamples, samples);
 
     // interleave samples
     bcnt := (fABSize - fABPos);
@@ -1140,6 +1176,7 @@ begin
   fOverBuffer := GetMem(DefaultOverflowBufferSize);
   fOBSize := 0;
   fOBPos := 0;
+  FDecodedSamples := 0;
 
   FRef := TFLACDecoder.Create as IFLACDecoder;
   FRef.SetMetadataRespond(FLAC__METADATA_TYPE_VORBIS_COMMENT);
@@ -1259,20 +1296,24 @@ end;
 
 procedure TFLACAbstractDecoder.ResetToStart;
 begin
-  fRef.Reset;
+  DoSeekAbsolute(0);
 end;
 
 procedure TFLACAbstractDecoder.RawSeek(pos : Int64);
 begin
   if DataStream.Seekable then
-    fRef.SeekAbsolute(FrameFromBytes(pos).AsSamples) else
+  begin
+    DoSeekAbsolute(FrameFromBytes(pos).AsSamples);
+  end else
     inherited RawSeek(pos);
 end;
 
 procedure TFLACAbstractDecoder.SampleSeek(pos : Integer);
 begin
   if DataStream.Seekable then
-    fRef.SeekAbsolute(pos) else
+  begin
+    DoSeekAbsolute(pos);
+  end else
     inherited SampleSeek(pos);
 end;
 
@@ -1282,8 +1323,8 @@ var
 begin
   if DataStream.Seekable then
   begin
-    v := Round(pos * GetFrequency);
-    fRef.SeekAbsolute(v);
+    v := Round(pos) * GetFrequency;
+    DoSeekAbsolute(v);
   end else
     inherited TimeSeek(pos);
 end;
@@ -1291,7 +1332,7 @@ end;
 function TFLACAbstractDecoder.RawTell : Int64;
 begin
   if DataStream.Seekable then
-    Result := FrameFromSamples(fRef.GetDecodePosition).AsBytes
+    Result := FrameFromSamples(FDecodedSamples).AsBytes
   else
     Result := inherited RawTell;
 end;
@@ -1299,7 +1340,7 @@ end;
 function TFLACAbstractDecoder.SampleTell : Integer;
 begin
   if DataStream.Seekable then
-    Result := fRef.GetDecodePosition
+    Result := FDecodedSamples
   else
     Result := inherited SampleTell;
 end;
@@ -1307,7 +1348,7 @@ end;
 function TFLACAbstractDecoder.TimeTell : Double;
 begin
   if DataStream.Seekable then
-    Result := Double(fRef.GetDecodePosition) / Double(fRef.GetSampleRate)
+    Result := Double(FDecodedSamples) / Double(fRef.GetSampleRate)
   else
     Result := inherited TimeTell;
 end;
