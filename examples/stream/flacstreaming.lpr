@@ -42,8 +42,8 @@ const // the name of source FLAC-ogg file
 
 var
   oggf : TFLACOggFile; // interface to encode/decode FLAC-Ogg data
-  pack_enc : TFLACStreamEncoder;  // FLAC custom streaming encoder
-  pack_dec : TFLACStreamDecoder;  // FLAC custom streaming decoder
+  pack_enc : ISoundStreamEncoder;  // FLAC custom streaming encoder
+  pack_dec : ISoundStreamDecoder;  // FLAC custom streaming decoder
   aFileStream : TFileStream;      // TFileStream linked to cStreamFile
   Buffer : Pointer;               // intermediate buffer
   len : ISoundFrameSize;          // length of data
@@ -108,7 +108,7 @@ begin
             try
               // initialize custom streaming encoder
               if not Assigned(pack_enc) then
-                pack_enc := TFLAC.FLACStreamEncoder(aFileStream,
+                pack_enc := TFLAC.NewStreamEncoder(aFileStream,
                                                     [sdpForceNotSeekable,
                                                      sdpWriteOnly],
                                                     aEncProps, nil)
@@ -139,7 +139,7 @@ begin
           // write the packets that are in the cache.
           if Assigned(pack_enc) then
           begin
-            pack_enc.Free;
+            pack_enc := nil;
           end;
         finally
           FreeMemAndNil(Buffer);
@@ -164,7 +164,7 @@ begin
               // open file stream to read from cStreamFile
               aFileStream := TFileStream.Create(Files[i], fmOpenRead);
               try
-                pack_dec := TFLAC.FLACStreamDecoder(aFileStream,
+                pack_dec := TFLAC.NewStreamDecoder(aFileStream,
                                                     [sdpForceNotSeekable,
                                                      sdpReadOnly]);
                 try
@@ -179,7 +179,7 @@ begin
                     end;
                   until len.Less(ChunkLength);
                 finally
-                  pack_dec.Free;
+                  pack_dec := nil;
                 end;
               finally
                 aFileStream.Free;

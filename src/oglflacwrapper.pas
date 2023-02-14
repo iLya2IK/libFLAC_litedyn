@@ -485,20 +485,20 @@ type
 
   { TFLACStreamEncoder }
 
-  TFLACStreamEncoder = class(TFLACAbstractEncoder)
+  TFLACStreamEncoder = class(TFLACAbstractEncoder, ISoundStreamEncoder)
   public
     constructor Create(aStream : TStream; aDataLimits : TSoundDataLimits;
       aProps : ISoundEncoderProps; aComments : ISoundComment);
-    procedure SetStream(aStream : TStream);
+    procedure SetStream(aStream : TStream); virtual;
   end;
 
   { TFLACOggStreamEncoder }
 
-  TFLACOggStreamEncoder = class(TFLACOggEncoder)
+  TFLACOggStreamEncoder = class(TFLACOggEncoder, ISoundStreamEncoder)
   public
     constructor Create(aStream : TStream; aDataLimits : TSoundDataLimits;
       aProps : ISoundEncoderProps; aComments : ISoundComment);
-    procedure SetStream(aStream : TStream);
+    procedure SetStream(aStream : TStream); virtual;
   end;
 
   { TFLACAbstractDecoder }
@@ -565,17 +565,18 @@ type
 
   { TFLACStreamDecoder }
 
-  TFLACStreamDecoder = class(TFLACAbstractDecoder)
+  TFLACStreamDecoder = class(TFLACAbstractDecoder, ISoundStreamDecoder)
   public
     constructor Create(aStream : TStream; aDataLimits : TSoundDataLimits);
-    procedure SetStream(aStream : TStream);
+    procedure SetStream(aStream : TStream); virtual;
   end;
 
   { TFLACOggStreamDecoder }
 
-  TFLACOggStreamDecoder = class(TFLACOggDecoder)
+  TFLACOggStreamDecoder = class(TFLACOggDecoder, ISoundStreamDecoder)
   public
     constructor Create(aStream : TStream; aDataLimits : TSoundDataLimits);
+    procedure SetStream(aStream : TStream); virtual;
   end;
 
   { TFLACFile }
@@ -601,19 +602,19 @@ type
   public
     class function NewEncComment : IFLACEncComment;
     class function NewEncComment(aSrc : ISoundComment) : IFLACEncComment;
-    class function FLACOggStreamEncoder(aStream : TStream;
+    class function NewOggStreamEncoder(aStream : TStream;
         aDataLimits : TSoundDataLimits; aProps : ISoundEncoderProps;
-        aComments : ISoundComment) : TFLACOggStreamEncoder;
-    class function FLACOggStreamDecoder(aStream : TStream;
-        aDataLimits : TSoundDataLimits) : TFLACOggStreamDecoder;
-    class function FLACStreamEncoder(aStream : TStream;
+        aComments : ISoundComment) : ISoundStreamEncoder;
+    class function NewOggStreamDecoder(aStream : TStream;
+        aDataLimits : TSoundDataLimits) : ISoundStreamDecoder;
+    class function NewStreamEncoder(aStream : TStream;
         aDataLimits : TSoundDataLimits; aProps : ISoundEncoderProps;
-        aComments : ISoundComment) : TFLACStreamEncoder;
-    class function FLACStreamDecoder(aStream : TStream;
-        aDataLimits : TSoundDataLimits) : TFLACStreamDecoder;
+        aComments : ISoundComment) : ISoundStreamEncoder;
+    class function NewStreamDecoder(aStream : TStream;
+        aDataLimits : TSoundDataLimits) : ISoundStreamDecoder;
 
-    const PROP_COMPR_LEVEL : Cardinal = $031;
-    const PROP_SUBSET : Cardinal      = $032;
+    const PROP_COMPR_LEVEL  = $031;
+    const PROP_SUBSET       = $032;
 
     class function FLACLibsLoad(const aFLACLibs : array of String) : Boolean;
     class function FLACLibsLoadDefault : Boolean;
@@ -1048,6 +1049,11 @@ constructor TFLACOggStreamDecoder.Create(aStream : TStream;
 begin
   InitStream(TOGLSound.NewDataStream(aStream, aDataLimits));
   inherited Create;
+end;
+
+procedure TFLACOggStreamDecoder.SetStream(aStream : TStream);
+begin
+  (DataStream as TSoundDataStream).Stream := aStream;
 end;
 
 { TFLACOggDecoder }
@@ -2186,28 +2192,28 @@ begin
     Result := TFLACEncComment.CreateFromInterface(aSrc) as IFLACEncComment;
 end;
 
-class function TFLAC.FLACOggStreamEncoder(aStream : TStream;
-  aDataLimits : TSoundDataLimits;
-  aProps : ISoundEncoderProps; aComments : ISoundComment) : TFLACOggStreamEncoder;
+class function TFLAC.NewOggStreamEncoder(aStream : TStream;
+  aDataLimits : TSoundDataLimits; aProps : ISoundEncoderProps;
+  aComments : ISoundComment) : ISoundStreamEncoder;
 begin
   Result := TFLACOggStreamEncoder.Create(aStream, aDataLimits, aProps, aComments);
 end;
 
-class function TFLAC.FLACOggStreamDecoder(aStream : TStream;
-  aDataLimits : TSoundDataLimits) : TFLACOggStreamDecoder;
+class function TFLAC.NewOggStreamDecoder(aStream : TStream;
+  aDataLimits : TSoundDataLimits) : ISoundStreamDecoder;
 begin
   Result := TFLACOggStreamDecoder.Create(aStream, aDataLimits);
 end;
 
-class function TFLAC.FLACStreamEncoder(aStream : TStream;
+class function TFLAC.NewStreamEncoder(aStream : TStream;
   aDataLimits : TSoundDataLimits;
-  aProps : ISoundEncoderProps; aComments: ISoundComment) : TFLACStreamEncoder;
+  aProps : ISoundEncoderProps; aComments: ISoundComment) : ISoundStreamEncoder;
 begin
   Result := TFLACStreamEncoder.Create(aStream, aDataLimits, aProps, aComments);
 end;
 
-class function TFLAC.FLACStreamDecoder(aStream : TStream;
-  aDataLimits : TSoundDataLimits) : TFLACStreamDecoder;
+class function TFLAC.NewStreamDecoder(aStream : TStream;
+  aDataLimits : TSoundDataLimits) : ISoundStreamDecoder;
 begin
   Result := TFLACStreamDecoder.Create(aStream, aDataLimits);
 end;

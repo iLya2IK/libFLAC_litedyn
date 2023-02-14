@@ -141,8 +141,11 @@ begin
 
   comments := TFLAC.NewEncComment;
   comments.Vendor := 'OALFLACDataRecorder';
-  comments.AddTag(COMMENT_ARTIST, 'Your voice');
-  comments.AddTag(COMMENT_TITLE,  'Record');
+  with TOGLSoundComments do
+  begin
+  comments.AddTag(TagID(COMMENT_ARTIST), 'Your voice');
+  comments.AddTag(TagID(COMMENT_TITLE),  'Record');
+  end;
   Result := FStream.SaveToFile(Fn,
                        TOGLSound.EncProps([TOGLSound.PROP_CHANNELS,  channels,
                                            TOGLSound.PROP_FREQUENCY, Frequency,
