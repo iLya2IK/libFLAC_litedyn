@@ -616,6 +616,8 @@ type
     const PROP_COMPR_LEVEL  = $031;
     const PROP_SUBSET       = $032;
 
+    class function EncoderVersionString : String;
+
     class function FLACLibsLoad(const aFLACLibs : array of String) : Boolean;
     class function FLACLibsLoadDefault : Boolean;
     class function IsFLACLibsLoaded : Boolean;
@@ -2216,6 +2218,11 @@ class function TFLAC.NewStreamDecoder(aStream : TStream;
   aDataLimits : TSoundDataLimits) : ISoundStreamDecoder;
 begin
   Result := TFLACStreamDecoder.Create(aStream, aDataLimits);
+end;
+
+class function TFLAC.EncoderVersionString : String;
+begin
+  Result := StrPas(PChar(FLAC__VERSION_STRING));
 end;
 
 class function TFLAC.FLACLibsLoad(const aFLACLibs : array of String

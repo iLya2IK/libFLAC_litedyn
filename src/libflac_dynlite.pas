@@ -500,6 +500,8 @@ const
   FLAC__STREAM_ENCODER_TELL_STATUS_ERROR = 1;
   FLAC__STREAM_ENCODER_TELL_STATUS_UNSUPPORTED = 2;
 
+function FLAC__VERSION_STRING : pcuchar;
+
 { metadata.h }
 
 function FLAC__metadata_object_new(atype : FLAC__MetadataType) : pFLAC__StreamMetadata;
@@ -655,6 +657,8 @@ resourcestring
   SFailedToLoadFLAC = 'Failed to load FLAC library';
 
 type
+  p_FLAC__VERSION_STRING = ^pcuchar;
+
   p_FLAC__metadata_object_new = function (atype : FLAC__MetadataType) : pFLAC__StreamMetadata; cdecl;
   p_FLAC__metadata_object_clone = function (const aobject : pFLAC__StreamMetadata) : pFLAC__StreamMetadata; cdecl;
   p_FLAC__metadata_object_delete = procedure (aobject : pFLAC__StreamMetadata); cdecl;
@@ -752,6 +756,8 @@ type
   p_FLAC__stream_encoder_process_interleaved = function(encoder: pFLAC__StreamEncoder; const buffer: pFLAC__int32; samples: cuint32): FLAC__bool; cdecl;
 
 var
+  _FLAC__VERSION_STRING        :p_FLAC__VERSION_STRING = nil;
+
   _FLAC__metadata_object_new   :p_FLAC__metadata_object_new   =nil;
   _FLAC__metadata_object_clone :p_FLAC__metadata_object_clone =nil;
   _FLAC__metadata_object_delete:p_FLAC__metadata_object_delete=nil;
@@ -917,6 +923,8 @@ end;
 
 procedure LoadFLACEntryPoints;
 begin
+  _FLAC__VERSION_STRING    := p_FLAC__VERSION_STRING(GetProcAddr(FLACLib, 'FLAC__VERSION_STRING'));
+
   _FLAC__metadata_object_new    := p_FLAC__metadata_object_new(GetProcAddr(FLACLib, 'FLAC__metadata_object_new'));
   _FLAC__metadata_object_clone  := p_FLAC__metadata_object_clone(GetProcAddr(FLACLib, 'FLAC__metadata_object_clone'));
   _FLAC__metadata_object_delete := p_FLAC__metadata_object_delete(GetProcAddr(FLACLib, 'FLAC__metadata_object_delete'));
@@ -1137,6 +1145,14 @@ begin
   ClearFLACEntryPoints;
   UnloadLibraries;
   Result := True;
+end;
+
+function FLAC__VERSION_STRING : pcuchar;
+begin
+  if Assigned(_FLAC__VERSION_STRING) then
+    Result := _FLAC__VERSION_STRING^
+  else
+    Result := nil;
 end;
 
 function FLAC__metadata_object_new(atype : FLAC__MetadataType
