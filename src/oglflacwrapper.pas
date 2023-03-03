@@ -613,8 +613,8 @@ type
     class function NewStreamDecoder(aStream : TStream;
         aDataLimits : TSoundDataLimits) : ISoundStreamDecoder;
 
-    const PROP_COMPR_LEVEL  = $031;
-    const PROP_SUBSET       = $032;
+    const PROP_COMPR_LEVEL  = $301;
+    const PROP_SUBSET       = $302;
 
     class function EncoderVersionString : String;
 
